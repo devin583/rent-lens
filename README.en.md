@@ -12,6 +12,7 @@ It is designed for these problems:
 ## Features
 
 - Save Facebook rental URLs, post text, and images.
+- Recommended with the Chrome / Edge browser extension for more reliable Facebook modal capture.
 - Keep the original text and switch between original / translation in one compact reader.
 - Extract rent, deposit, other fees, city, address, rooms, availability, contact info, and important details.
 - Show detected money values in a reference currency.
@@ -46,7 +47,7 @@ On first launch, if `data/store.json` does not exist, the app creates an empty l
 
 - Default UI language: English
 - Default translation language: English
-- Default reference currency: CNY
+- Default reference currency: USD
 - AI providers: empty, users add their own
 - Posts: empty
 
@@ -68,6 +69,8 @@ The script installs dependencies and opens:
 ```txt
 http://127.0.0.1:5173/
 ```
+
+The script also opens the extension folder and browser extension page. Browsers do not allow scripts to install local extensions automatically, so the first setup still requires one manual Load unpacked action.
 
 If macOS blocks the script, run:
 
@@ -91,6 +94,10 @@ The script installs dependencies and opens:
 ```txt
 http://127.0.0.1:5173/
 ```
+
+The script checks whether Node.js is installed. If it is missing, it tries to install Node.js LTS with Windows `winget`. After installation, you usually need to run the script again.
+
+The script also opens the extension folder and browser extension page. Browsers do not allow scripts to install local extensions automatically, so the first setup still requires one manual Load unpacked action.
 
 If Windows blocks the script, allow it or run this from the project folder:
 
@@ -117,7 +124,9 @@ The local API runs at:
 http://127.0.0.1:8787/
 ```
 
-## Browser Extension
+## Recommended Browser Extension
+
+Rent Lens can be used by manually pasting post text, but the browser extension is recommended. Facebook often uses modals and dynamic pages, and the extension reads the post content already visible in your browser.
 
 Extension folder:
 
@@ -189,35 +198,3 @@ server/          local API, AI calls, maps, dedupe, local store
 src/             React app, styles, i18n, AI provider presets, types
 data/            local runtime data folder, empty in GitHub
 ```
-
-## Release And Download
-
-Recommended flow:
-
-1. Push the project to GitHub.
-2. Create a GitHub Release.
-3. Upload `release/rent-lens-v0.1.0-source.zip`.
-
-GitHub also creates a Source code zip automatically, but the manually uploaded zip has a clearer name and is easier to share with friends.
-
-After downloading the zip, users only need to unzip it, install Node.js 20+, and double-click the startup script for their system.
-
-## Before Publishing
-
-Run:
-
-```bash
-npm run check
-```
-
-Do not commit:
-
-```txt
-data/store.json
-node_modules/
-dist/
-.env
-release/
-```
-
-If this repository will be public, choose a license such as MIT.

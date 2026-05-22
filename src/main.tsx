@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { aiProviderPresets, getProviderPreset } from "./aiProviders";
+import { aiProviderPresets, getProviderPreset, providerDisplayName } from "./aiProviders";
 import { createT, type TFunction } from "./i18n";
 import type {
   AiProviderConfig,
@@ -866,11 +866,11 @@ function SettingsModal({
               setDraft((current) => ({ ...current, referenceCurrency: event.target.value as AppSettings["referenceCurrency"] }))
             }
           >
-            <option value="CNY">CNY 人民币</option>
-            <option value="EUR">EUR 欧元</option>
-            <option value="HUF">HUF 福林</option>
-            <option value="USD">USD 美元</option>
-            <option value="GBP">GBP 英镑</option>
+            {currencyOptions(draft.uiLocale).map((currency) => (
+              <option key={currency.value} value={currency.value}>
+                {currency.label}
+              </option>
+            ))}
           </select>
         </div>
         ) : null}
@@ -901,7 +901,7 @@ function SettingsModal({
             <select value={vendorToAdd} onChange={(event) => setVendorToAdd(event.target.value as AiProviderVendor)}>
               {aiProviderPresets.map((preset) => (
                 <option key={preset.vendor} value={preset.vendor}>
-                  {preset.name}
+                  {providerDisplayName(preset.vendor, draft.uiLocale)}
                 </option>
               ))}
             </select>
@@ -930,7 +930,7 @@ function SettingsModal({
                       checked={provider.enabled}
                       onChange={(event) => updateProvider(provider.id, { enabled: event.target.checked })}
                     />
-                  <span>{provider.name || preset.name}</span>
+                  <span>{providerLabel(provider, preset, draft.uiLocale)}</span>
                 </label>
                 <div className="provider-meta">
                   <small>
@@ -1440,6 +1440,31 @@ function moneyMain(value: MoneyValue | null, t: TFunction) {
 function moneyReference(value: MoneyValue | null, referenceCurrency: string) {
   if (!value?.referenceAmount) return "";
   return `≈ ${value.referenceAmount.toLocaleString()} ${referenceCurrency}`;
+}
+
+function providerLabel(provider: AiProviderConfig, preset: ReturnType<typeof getProviderPreset>, locale: AppSettings["uiLocale"]) {
+  const localized = providerDisplayName(provider.vendor, locale);
+  const defaultNames = [preset.name, providerDisplayName(provider.vendor, "zh"), providerDisplayName(provider.vendor, "en")];
+  return !provider.name || defaultNames.includes(provider.name) ? localized : provider.name;
+}
+
+function currencyOptions(locale: AppSettings["uiLocale"]): Array<{ value: AppSettings["referenceCurrency"]; label: string }> {
+  if (locale === "zh") {
+    return [
+      { value: "USD", label: "USD 美元" },
+      { value: "EUR", label: "EUR 欧元" },
+      { value: "HUF", label: "HUF 福林" },
+      { value: "CNY", label: "CNY 人民币" },
+      { value: "GBP", label: "GBP 英镑" }
+    ];
+  }
+  return [
+    { value: "USD", label: "USD US dollar" },
+    { value: "EUR", label: "EUR euro" },
+    { value: "HUF", label: "HUF Hungarian forint" },
+    { value: "CNY", label: "CNY Chinese yuan" },
+    { value: "GBP", label: "GBP British pound" }
+  ];
 }
 
 function modelOptions(provider: AiProviderConfig, defaultModel: string) {

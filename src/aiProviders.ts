@@ -136,7 +136,7 @@ export const aiProviderPresets: AiProviderPreset[] = [
   },
   {
     vendor: "custom",
-    name: "自定义兼容接口",
+    name: "Custom OpenAI-compatible endpoint",
     type: "openai-compatible",
     baseUrl: "",
     model: "",
@@ -152,6 +152,22 @@ export const aiProviderPresets: AiProviderPreset[] = [
 
 export function getProviderPreset(vendor: AiProviderVendor) {
   return aiProviderPresets.find((preset) => preset.vendor === vendor) ?? aiProviderPresets[0];
+}
+
+export function providerDisplayName(vendor: AiProviderVendor, locale: "zh" | "en") {
+  const names: Record<AiProviderVendor, { zh: string; en: string }> = {
+    openai: { zh: "OpenAI", en: "OpenAI" },
+    gemini: { zh: "Gemini", en: "Gemini" },
+    anthropic: { zh: "Claude", en: "Claude" },
+    deepseek: { zh: "DeepSeek", en: "DeepSeek" },
+    kimi: { zh: "Kimi", en: "Kimi" },
+    qwen: { zh: "通义千问", en: "Qwen" },
+    glm: { zh: "智谱 GLM", en: "GLM" },
+    nvidia: { zh: "NVIDIA AI", en: "NVIDIA AI" },
+    minimax: { zh: "MiniMax", en: "MiniMax" },
+    custom: { zh: "自定义 OpenAI 兼容接口", en: "Custom OpenAI-compatible endpoint" }
+  };
+  return names[vendor]?.[locale] ?? getProviderPreset(vendor).name;
 }
 
 export function resolveProviderConfig(provider: AiProviderConfig): AiProviderConfig {

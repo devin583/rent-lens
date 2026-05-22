@@ -24,7 +24,7 @@ const legacyDefaultCategoryNames: Record<string, string> = {
 export const defaultSettings: AppSettings = {
   uiLocale: "en",
   targetLanguage: "en",
-  referenceCurrency: "CNY",
+  referenceCurrency: "USD",
   targetAddress: "",
   targetLocation: null,
   categories: defaultCategories,
