@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Rent Lens Capture</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Rent Lens</h1>
+        <p id="subtitle">Save the visible Facebook rental post.</p>
+      </header>
+
+      <button id="capture" class="primary">Save current post</button>
+      <button id="preview" class="secondary">Preview capture</button>
+      <button id="openApp" class="ghost">Open Rent Lens</button>
+
+      <section id="status" class="status">Open a Facebook post or post dialog first.</section>
+      <section id="previewBox" class="preview" hidden></section>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>

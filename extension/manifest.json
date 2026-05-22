@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Rent Lens Capture",
+  "version": "0.1.0",
+  "description": "Capture visible Facebook rental posts into the local Rent Lens app.",
+  "action": {
+    "default_title": "Save to Rent Lens",
+    "default_popup": "popup.html"
+  },
+  "permissions": ["activeTab", "scripting", "tabs"],
+  "host_permissions": [
+    "https://www.facebook.com/*",
+    "https://facebook.com/*",
+    "http://127.0.0.1:8787/*",
+    "http://127.0.0.1:5173/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://www.facebook.com/*", "https://facebook.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
