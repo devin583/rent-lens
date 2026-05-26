@@ -11,6 +11,7 @@ import {
   ExternalLink,
   Home,
   Image,
+  LayoutGrid,
   Loader2,
   MapPinned,
   MessageCircle,
@@ -18,6 +19,7 @@ import {
   Plus,
   RefreshCw,
   Save,
+  Search,
   Settings,
   Star,
   Trash2,
@@ -43,9 +45,14 @@ import type {
 } from "./types";
 import "./styles.css";
 
+type WorkspaceMode = "detail" | "new" | "cards";
+type CardSort = "updated_desc" | "created_desc" | "rent_asc" | "rent_desc" | "title_asc";
+type RentFilter = "all" | "detected" | "missing";
+
 function App() {
   const [store, setStore] = useState<AppStore | null>(null);
   const [selectedId, setSelectedId] = useState("");
+  const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>("detail");
   const [showSettings, setShowSettings] = useState(false);
   const [loading, setLoading] = useState(false);
   const [draft, setDraft] = useState<DraftInput>({ sourceUrl: "", originalText: "", images: [] });
@@ -71,11 +78,12 @@ function App() {
   }, [posts]);
 
   useEffect(() => {
+    if (workspaceMode !== "detail") return;
     if (!selectedId && selected) setSelectedId(selected.id);
     if (cityFilter && selectedId && !filteredPosts.some((post) => post.id === selectedId) && filteredPosts[0]) {
       setSelectedId(filteredPosts[0].id);
     }
-  }, [filteredPosts, selected, selectedId, cityFilter]);
+  }, [filteredPosts, selected, selectedId, cityFilter, workspaceMode]);
 
   const grouped = useMemo(
     () =>
@@ -122,6 +130,7 @@ function App() {
     const post = await response.json();
     await loadStore();
     setSelectedId(post.id);
+    setWorkspaceMode("detail");
     setDraft({ sourceUrl: "", originalText: "", images: [] });
     setImageText("");
     setLoading(false);
@@ -148,6 +157,7 @@ function App() {
     await fetch(`/api/posts/${id}`, { method: "DELETE" });
     await loadStore();
     setSelectedId("");
+    setWorkspaceMode("cards");
   }
 
   async function reanalyze(id: string) {
@@ -228,9 +238,23 @@ function App() {
             </div>
           </div>
 
-          <button className="primary-button" onClick={() => setSelectedId("")}>
+          <button
+            className={`primary-button ${workspaceMode === "new" ? "active" : ""}`}
+            onClick={() => {
+              setWorkspaceMode("new");
+              setSelectedId("");
+            }}
+          >
             <Plus size={16} />
             {t("addPost")}
+          </button>
+
+          <button
+            className={`secondary-button nav-button ${workspaceMode === "cards" ? "active" : ""}`}
+            onClick={() => setWorkspaceMode("cards")}
+          >
+            <LayoutGrid size={16} />
+            {t("cards")}
           </button>
 
           {cityOptions.length ? (
@@ -258,10 +282,13 @@ function App() {
                 key={category.id}
                 category={category}
                 posts={posts}
-                activeId={selected?.id}
+                activeId={workspaceMode === "detail" ? selected?.id : undefined}
                 t={t}
                 onRename={renameCategory}
-                onSelect={setSelectedId}
+                onSelect={(id) => {
+                  setWorkspaceMode("detail");
+                  setSelectedId(id);
+                }}
               />
             ))}
           </div>
@@ -278,7 +305,7 @@ function App() {
       </aside>
 
       <main className="workspace">
-        {!selectedId ? (
+        {workspaceMode === "new" ? (
           <NewPostPanel
             draft={draft}
             setDraft={setDraft}
@@ -289,6 +316,18 @@ function App() {
             t={t}
             onScrape={scrape}
             onAdd={addPost}
+          />
+        ) : workspaceMode === "cards" ? (
+          <CardOverview
+            posts={filteredPosts}
+            categories={categories}
+            referenceCurrency={store.settings.referenceCurrency}
+            cityFilter={cityFilter}
+            t={t}
+            onSelect={(id) => {
+              setWorkspaceMode("detail");
+              setSelectedId(id);
+            }}
           />
         ) : selected ? (
           <PostDetail
@@ -497,6 +536,171 @@ function NewPostPanel({
         </section>
       </div>
     </div>
+  );
+}
+
+function CardOverview({
+  posts,
+  categories,
+  referenceCurrency,
+  cityFilter,
+  t,
+  onSelect
+}: {
+  posts: RentalPost[];
+  categories: Category[];
+  referenceCurrency: string;
+  cityFilter: string;
+  t: TFunction;
+  onSelect: (id: string) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [categoryId, setCategoryId] = useState("");
+  const [contactStatus, setContactStatus] = useState<ContactStatus | "">("");
+  const [rentFilter, setRentFilter] = useState<RentFilter>("all");
+  const [sortBy, setSortBy] = useState<CardSort>("updated_desc");
+  const categoryMap = useMemo(() => new Map(categories.map((category) => [category.id, category.name])), [categories]);
+
+  const visiblePosts = useMemo(() => {
+    const search = query.trim().toLowerCase();
+    return posts
+      .filter((post) => {
+        if (categoryId && post.categoryId !== categoryId) return false;
+        if (contactStatus && post.contactStatus !== contactStatus) return false;
+        const hasRent = Boolean(post.structured.rent?.amount);
+        if (rentFilter === "detected" && !hasRent) return false;
+        if (rentFilter === "missing" && hasRent) return false;
+        if (!search) return true;
+        return [
+          post.title,
+          post.structured.city,
+          post.structured.address,
+          post.structured.rooms,
+          post.structured.availability,
+          post.translatedText,
+          post.originalText
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase()
+          .includes(search);
+      })
+      .sort((a, b) => comparePosts(a, b, sortBy, categoryMap));
+  }, [posts, categoryId, contactStatus, rentFilter, query, sortBy, categoryMap]);
+
+  const rentDetectedCount = visiblePosts.filter((post) => post.structured.rent?.amount).length;
+
+  return (
+    <div className="overview-page">
+      <div className="page-header overview-header">
+        <div>
+          <h2>{t("cards")}</h2>
+          <p>
+            {visiblePosts.length} / {posts.length} {t("postCount")}
+            {cityFilter ? ` · ${cityFilter === "__unknown__" ? t("unknownCity") : cityFilter}` : ""}
+          </p>
+        </div>
+      </div>
+
+      <section className="overview-toolbar">
+        <label className="search-field">
+          <Search size={15} />
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("searchPosts")} />
+        </label>
+        <select value={categoryId} onChange={(event) => setCategoryId(event.target.value)}>
+          <option value="">{t("allCategories")}</option>
+          {categories.map((category) => (
+            <option key={category.id} value={category.id}>
+              {category.name}
+            </option>
+          ))}
+        </select>
+        <select value={contactStatus} onChange={(event) => setContactStatus(event.target.value as ContactStatus | "")}>
+          <option value="">{t("allStatuses")}</option>
+          <option value="not_contacted">{t("notContacted")}</option>
+          <option value="contacted">{t("contacted")}</option>
+          <option value="waiting">{t("waiting")}</option>
+          <option value="visited">{t("visited")}</option>
+          <option value="rejected">{t("rejected")}</option>
+        </select>
+        <select value={rentFilter} onChange={(event) => setRentFilter(event.target.value as RentFilter)}>
+          <option value="all">{t("allRent")}</option>
+          <option value="detected">{t("rentDetected")}</option>
+          <option value="missing">{t("rentMissing")}</option>
+        </select>
+        <select value={sortBy} onChange={(event) => setSortBy(event.target.value as CardSort)}>
+          <option value="updated_desc">{t("updatedNewest")}</option>
+          <option value="created_desc">{t("createdNewest")}</option>
+          <option value="rent_asc">{t("rentLowHigh")}</option>
+          <option value="rent_desc">{t("rentHighLow")}</option>
+          <option value="title_asc">{t("titleAZ")}</option>
+        </select>
+      </section>
+
+      <div className="overview-summary">
+        <span>{t("rentDetected")}: {rentDetectedCount}</span>
+        <span>{t("rentMissing")}: {visiblePosts.length - rentDetectedCount}</span>
+      </div>
+
+      {visiblePosts.length ? (
+        <div className="post-card-grid">
+          {visiblePosts.map((post) => (
+            <RentalCard
+              key={post.id}
+              post={post}
+              categoryName={categoryMap.get(post.categoryId) || t("unrecognized")}
+              referenceCurrency={referenceCurrency}
+              t={t}
+              onClick={() => onSelect(post.id)}
+            />
+          ))}
+        </div>
+      ) : (
+        <section className="empty-state">
+          <p>{t("noMatchingPosts")}</p>
+        </section>
+      )}
+    </div>
+  );
+}
+
+function RentalCard({
+  post,
+  categoryName,
+  referenceCurrency,
+  t,
+  onClick
+}: {
+  post: RentalPost;
+  categoryName: string;
+  referenceCurrency: string;
+  t: TFunction;
+  onClick: () => void;
+}) {
+  const image = post.images[0];
+  const location = [post.structured.city, post.structured.address].filter(Boolean).join(" · ") || t("unrecognized");
+  return (
+    <button className="rental-card" onClick={onClick}>
+      <div className="card-image">
+        {image ? <img src={image} alt="" /> : <Image size={22} />}
+      </div>
+      <div className="card-body">
+        <div className="card-title-row">
+          <h3>{post.title}</h3>
+          <span>{contactLabel(post.contactStatus, t)}</span>
+        </div>
+        <div className="card-rent">
+          <strong>{moneyMain(post.structured.rent, t)}</strong>
+          <small>{moneyReference(post.structured.rent, referenceCurrency)}</small>
+        </div>
+        <p className="card-location">{location}</p>
+        <div className="card-meta">
+          <span>{categoryName}</span>
+          {post.structured.rooms ? <span>{post.structured.rooms}</span> : null}
+          {post.images.length ? <span>{post.images.length} {t("images")}</span> : null}
+        </div>
+      </div>
+    </button>
   );
 }
 
@@ -1465,6 +1669,31 @@ function currencyOptions(locale: AppSettings["uiLocale"]): Array<{ value: AppSet
     { value: "CNY", label: "CNY Chinese yuan" },
     { value: "GBP", label: "GBP British pound" }
   ];
+}
+
+function comparePosts(a: RentalPost, b: RentalPost, sortBy: CardSort, categoryMap: Map<string, string>) {
+  if (sortBy === "rent_asc") return compareRent(a, b, "asc");
+  if (sortBy === "rent_desc") return compareRent(a, b, "desc");
+  if (sortBy === "created_desc") return postTime(b.createdAt) - postTime(a.createdAt);
+  if (sortBy === "title_asc") return a.title.localeCompare(b.title);
+  const categoryA = categoryMap.get(a.categoryId) || "";
+  const categoryB = categoryMap.get(b.categoryId) || "";
+  if (sortBy === "updated_desc") return postTime(b.updatedAt) - postTime(a.updatedAt);
+  return categoryA.localeCompare(categoryB) || postTime(b.updatedAt) - postTime(a.updatedAt);
+}
+
+function compareRent(a: RentalPost, b: RentalPost, direction: "asc" | "desc") {
+  const rentA = a.structured.rent?.amount ?? null;
+  const rentB = b.structured.rent?.amount ?? null;
+  if (rentA === null && rentB === null) return postTime(b.updatedAt) - postTime(a.updatedAt);
+  if (rentA === null) return 1;
+  if (rentB === null) return -1;
+  return direction === "asc" ? rentA - rentB : rentB - rentA;
+}
+
+function postTime(value: string) {
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) ? time : 0;
 }
 
 function modelOptions(provider: AiProviderConfig, defaultModel: string) {
