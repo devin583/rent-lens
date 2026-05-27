@@ -686,7 +686,7 @@ textarea {
 
 .detail-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 360px;
+  grid-template-columns: minmax(0, 1fr) 390px;
   min-height: 100vh;
 }
 
@@ -744,8 +744,132 @@ textarea {
   font-size: 13px;
 }
 
+.listing-snapshot {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 16px;
+  border: 1px solid #ded8cc;
+  border-radius: 12px;
+  background: #fffdf9;
+  box-shadow: 0 1px 2px rgba(37, 34, 29, 0.04);
+}
+
+.snapshot-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.snapshot-head h3 {
+  font-size: 15px;
+  font-weight: 680;
+}
+
+.snapshot-head span {
+  min-height: 26px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 9px;
+  color: #57524b;
+  border: 1px solid #e3ddd3;
+  border-radius: 999px;
+  background: #fff;
+  font-size: 12px;
+}
+
+.snapshot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 10px;
+}
+
+.snapshot-item {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 12px;
+  border: 1px solid #eee8dd;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.snapshot-item.strong {
+  border-color: #d8d0c2;
+  background: #fffaf0;
+}
+
+.snapshot-icon {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  color: #504b45;
+  border: 1px solid #e7e1d8;
+  border-radius: 9px;
+  background: #fbfaf7;
+}
+
+.snapshot-item label {
+  display: block;
+  margin-bottom: 4px;
+  color: #77736c;
+  font-size: 11px;
+  font-weight: 680;
+  text-transform: uppercase;
+}
+
+.snapshot-item strong {
+  display: block;
+  overflow: hidden;
+  color: #242424;
+  font-size: 14px;
+  font-weight: 660;
+  line-height: 1.32;
+  overflow-wrap: anywhere;
+}
+
+.snapshot-item.strong strong {
+  font-size: 19px;
+  line-height: 1.16;
+}
+
+.snapshot-item small {
+  display: block;
+  margin-top: 4px;
+  overflow: hidden;
+  color: #77736c;
+  font-size: 12px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .status-panel {
   padding: 14px;
+}
+
+.workflow-panel {
+  gap: 14px;
+}
+
+.workflow-heading {
+  display: grid;
+  gap: 4px;
+}
+
+.workflow-heading h3 {
+  font-size: 15px;
+  font-weight: 680;
+}
+
+.workflow-heading p {
+  color: #77736c;
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .status-panel label,
@@ -833,6 +957,77 @@ textarea {
   display: flex;
   flex-wrap: wrap;
   gap: 7px;
+}
+
+.phrase-library {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #eee8dd;
+  border-radius: 10px;
+  background: #fbfaf7;
+}
+
+.phrase-library-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.language-toggle {
+  display: inline-grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid #e2ded6;
+  border-radius: 999px;
+  background: #f2efe9;
+}
+
+.language-toggle button {
+  min-width: 34px;
+  min-height: 24px;
+  padding: 0 8px;
+  color: #69645c;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 680;
+}
+
+.language-toggle button.active {
+  color: #2f2f2f;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(37, 34, 29, 0.08);
+}
+
+.phrase-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.phrase-grid button {
+  min-width: 0;
+  min-height: 32px;
+  padding: 0 8px;
+  overflow: hidden;
+  color: #4f4a44;
+  border: 1px solid #e1dcd2;
+  border-radius: 9px;
+  background: #fff;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.phrase-grid button:hover {
+  color: #2f3430;
+  border-color: #cfc8bd;
+  background: #f5f2ed;
 }
 
 .contact-anchors span {
@@ -1593,6 +1788,10 @@ textarea {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .snapshot-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .search-field {
     grid-column: 1 / -1;
   }
@@ -1633,7 +1832,9 @@ textarea {
   }
 
   .overview-toolbar,
-  .post-card-grid {
+  .post-card-grid,
+  .snapshot-grid,
+  .phrase-grid {
     grid-template-columns: 1fr;
   }
 

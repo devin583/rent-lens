@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
+  Banknote,
+  CalendarDays,
   CheckCircle2,
   Bike,
   ChevronLeft,
@@ -14,6 +16,7 @@ import {
   Image,
   LayoutGrid,
   Loader2,
+  MapPin,
   MapPinned,
   MessageCircle,
   MoreHorizontal,
@@ -54,6 +57,8 @@ type WorkspaceMode = "detail" | "new" | "cards";
 type CardSort = "updated_desc" | "created_desc" | "rent_asc" | "rent_desc" | "title_asc";
 type RentFilter = "all" | "detected" | "missing";
 type ContactMessageMode = "short" | "detailed" | "ref";
+type PhraseLanguage = "en" | "hu";
+type PhraseTemplateId = "availability" | "viewing" | "costs" | "deposit" | "address" | "follow_up";
 
 function App() {
   const [store, setStore] = useState<AppStore | null>(null);
@@ -821,6 +826,8 @@ function PostDetail({
           </div>
         </div>
 
+        <ListingSnapshot post={post} referenceCurrency={referenceCurrency} t={t} />
+
         <div className="read-section text-switch-section">
           <div className="section-header">
             <h3>{textView === "translation" ? t("translation") : t("original")}</h3>
@@ -879,7 +886,11 @@ function PostDetail({
           ) : null}
         </section>
 
-        <section className="status-panel">
+        <section className="status-panel workflow-panel">
+          <div className="workflow-heading">
+            <h3>{t("workflow")}</h3>
+            <p>{t("workflowHint")}</p>
+          </div>
           <div className="status-controls">
             <label>
               <span>{t("category")}</span>
@@ -957,6 +968,66 @@ function PostDetail({
   );
 }
 
+function ListingSnapshot({
+  post,
+  referenceCurrency,
+  t
+}: {
+  post: RentalPost;
+  referenceCurrency: string;
+  t: TFunction;
+}) {
+  const location = [post.structured.city, post.structured.address].filter(Boolean).join(" · ") || t("unrecognized");
+  const items = [
+    {
+      label: t("rent"),
+      value: moneyMain(post.structured.rent, t),
+      detail: moneyReference(post.structured.rent, referenceCurrency),
+      icon: <Banknote size={17} />,
+      strong: true
+    },
+    {
+      label: t("location"),
+      value: location,
+      detail: post.structured.mapQuery || "",
+      icon: <MapPin size={17} />
+    },
+    {
+      label: t("availability"),
+      value: post.structured.availability || t("unrecognized"),
+      detail: "",
+      icon: <CalendarDays size={17} />
+    },
+    {
+      label: t("rooms"),
+      value: post.structured.rooms || t("unrecognized"),
+      detail: post.structured.deposit?.amount ? `${t("deposit")}: ${moneyMain(post.structured.deposit, t)}` : "",
+      icon: <Home size={17} />
+    }
+  ];
+
+  return (
+    <section className="listing-snapshot">
+      <div className="snapshot-head">
+        <h3>{t("listingSnapshot")}</h3>
+        <span>{contactLabel(post.contactStatus, t)}</span>
+      </div>
+      <div className="snapshot-grid">
+        {items.map((item) => (
+          <div className={`snapshot-item ${item.strong ? "strong" : ""}`} key={item.label}>
+            <div className="snapshot-icon">{item.icon}</div>
+            <div>
+              <label>{item.label}</label>
+              <strong>{item.value}</strong>
+              {item.detail ? <small>{item.detail}</small> : null}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function ContactFollowUpPanel({
   post,
   t,
@@ -967,7 +1038,9 @@ function ContactFollowUpPanel({
   onUpdate: (patch: Partial<RentalPost>) => void;
 }) {
   const tracking = post.contactTracking;
-  const messages = useMemo(() => buildContactMessages(post), [post]);
+  const [phraseLanguage, setPhraseLanguage] = useState<PhraseLanguage>("en");
+  const messages = useMemo(() => buildContactMessages(post, phraseLanguage), [post, phraseLanguage]);
+  const phraseTemplates = useMemo(() => buildPhraseTemplates(post, phraseLanguage), [post, phraseLanguage]);
   const [messageMode, setMessageMode] = useState<ContactMessageMode>("detailed");
   const [messageDraft, setMessageDraft] = useState(messages.detailed);
   const [landlordName, setLandlordName] = useState(tracking.landlordName);
@@ -983,6 +1056,11 @@ function ContactFollowUpPanel({
     setNoteDraft("");
     setNotice("");
   }, [post.id, messages.detailed, tracking.landlordName, tracking.messengerUrl]);
+
+  useEffect(() => {
+    setMessageMode("detailed");
+    setMessageDraft(messages.detailed);
+  }, [phraseLanguage, messages.detailed]);
 
   function switchMessageMode(mode: ContactMessageMode) {
     setMessageMode(mode);
@@ -1074,6 +1152,33 @@ function ContactFollowUpPanel({
         <label>{t("searchAnchors")}</label>
         <div>
           {messages.anchors.length ? messages.anchors.map((anchor) => <span key={anchor}>{anchor}</span>) : <span>{t("unrecognized")}</span>}
+        </div>
+      </div>
+
+      <div className="phrase-library">
+        <div className="phrase-library-head">
+          <label>{t("quickPhrases")}</label>
+          <div className="language-toggle" aria-label={t("messageLanguage")}>
+            <button className={phraseLanguage === "en" ? "active" : ""} onClick={() => setPhraseLanguage("en")}>
+              EN
+            </button>
+            <button className={phraseLanguage === "hu" ? "active" : ""} onClick={() => setPhraseLanguage("hu")}>
+              HU
+            </button>
+          </div>
+        </div>
+        <div className="phrase-grid">
+          {phraseTemplates.map((phrase) => (
+            <button
+              key={phrase.id}
+              onClick={() => {
+                setMessageMode("detailed");
+                setMessageDraft(phrase.text);
+              }}
+            >
+              {phrase.label}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -1841,13 +1946,29 @@ function InfoRow({ icon, label, value }: { icon?: React.ReactNode; label: string
   );
 }
 
-function buildContactMessages(post: RentalPost) {
+function buildContactMessages(post: RentalPost, language: PhraseLanguage = "en") {
   const location = contactLocation(post);
   const subject = contactSubject(post);
+  const subjectHu = contactSubjectHu(post);
   const rent = contactMoney(post.structured.rent);
   const availability = safeContactAnchor(post.structured.availability);
   const rooms = safeContactAnchor(post.structured.rooms);
   const anchors = [location, rent, availability, rooms].filter(Boolean).slice(0, 5);
+  if (language === "hu") {
+    const baseQuestion = location
+      ? `szia, elérhető még a(z) ${location} címen lévő ${subjectHu}?`
+      : `szia, elérhető még ez a ${subjectHu}?`;
+    const details = [rent ? `${rent} bérleti díj` : "", availability ? `${availability} elérhetőség` : "", rooms].filter(Boolean);
+    const detailed = details.length
+      ? `${baseQuestion}\na hirdetésben ez szerepelt: ${joinNaturalHu(details)}.`
+      : `${baseQuestion}\na facebook hirdetésed miatt írok.`;
+    return {
+      short: baseQuestion,
+      detailed,
+      ref: `${detailed}\n\nsaját jegyzethez: ${post.contactTracking.ref}`,
+      anchors
+    };
+  }
   const baseQuestion = location
     ? `hi, is the ${subject} in ${location} still available?`
     : `hi, is this ${subject} still available?`;
@@ -1863,6 +1984,83 @@ function buildContactMessages(post: RentalPost) {
   };
 }
 
+function buildPhraseTemplates(post: RentalPost, language: PhraseLanguage): Array<{ id: PhraseTemplateId; label: string; text: string }> {
+  const location = contactLocation(post);
+  const subject = contactSubject(post);
+  const subjectHu = contactSubjectHu(post);
+  const rent = contactMoney(post.structured.rent);
+  if (language === "hu") {
+    return [
+      {
+        id: "availability",
+        label: "Elérhető?",
+        text: location ? `szia, elérhető még a(z) ${location} címen lévő ${subjectHu}?` : `szia, elérhető még ez a ${subjectHu}?`
+      },
+      {
+        id: "viewing",
+        label: "Megtekintés",
+        text: `meg lehet nézni ezen a héten? rugalmas vagyok az időponttal.`
+      },
+      {
+        id: "costs",
+        label: "Teljes költség",
+        text: rent
+          ? `a hirdetésben ${rent} szerepel. meg tudnád írni a teljes havi költséget rezsivel és közös költséggel együtt?`
+          : `meg tudnád írni a teljes havi költséget rezsivel és közös költséggel együtt?`
+      },
+      {
+        id: "deposit",
+        label: "Kaució",
+        text: `mennyi a kaució, és hány havi díjat kell fizetni beköltözéskor?`
+      },
+      {
+        id: "address",
+        label: "Pontos cím",
+        text: `el tudod küldeni a pontos címet vagy a legközelebbi tájékozódási pontot?`
+      },
+      {
+        id: "follow_up",
+        label: "Emlékeztető",
+        text: `szia, csak érdeklődöm, hogy elérhető-e még ez a ${subjectHu}.`
+      }
+    ];
+  }
+  return [
+    {
+      id: "availability",
+      label: "Available?",
+      text: location ? `hi, is the ${subject} in ${location} still available?` : `hi, is this ${subject} still available?`
+    },
+    {
+      id: "viewing",
+      label: "Viewing",
+      text: `could i view it this week? i'm flexible with time.`
+    },
+    {
+      id: "costs",
+      label: "Total cost",
+      text: rent
+        ? `i saw ${rent} in the post. could you tell me the total monthly cost including utilities and common cost?`
+        : `could you tell me the total monthly cost including utilities and common cost?`
+    },
+    {
+      id: "deposit",
+      label: "Deposit",
+      text: `how much deposit is required, and how much should be paid before moving in?`
+    },
+    {
+      id: "address",
+      label: "Exact address",
+      text: `could you send the exact address or nearest landmark?`
+    },
+    {
+      id: "follow_up",
+      label: "Follow-up",
+      text: `hi, just following up on this ${subject}. is it still available?`
+    }
+  ];
+}
+
 function contactLocation(post: RentalPost) {
   const address = safeContactAnchor(post.structured.address);
   const city = safeContactAnchor(post.structured.city);
@@ -1875,6 +2073,13 @@ function contactSubject(post: RentalPost) {
   if (text.includes("room") || text.includes("szoba")) return "room";
   if (text.includes("apartment") || text.includes("flat") || text.includes("lakás")) return "apartment";
   return "place";
+}
+
+function contactSubjectHu(post: RentalPost) {
+  const text = `${post.title} ${post.structured.rooms}`.toLowerCase();
+  if (text.includes("room") || text.includes("szoba")) return "szoba";
+  if (text.includes("apartment") || text.includes("flat") || text.includes("lakás")) return "lakás";
+  return "ingatlan";
 }
 
 function contactMoney(value: MoneyValue | null) {
@@ -1892,6 +2097,12 @@ function joinNatural(items: string[]) {
   if (items.length <= 1) return items[0] ?? "";
   if (items.length === 2) return `${items[0]} and ${items[1]}`;
   return `${items.slice(0, -1).join(", ")}, and ${items.at(-1)}`;
+}
+
+function joinNaturalHu(items: string[]) {
+  if (items.length <= 1) return items[0] ?? "";
+  if (items.length === 2) return `${items[0]} és ${items[1]}`;
+  return `${items.slice(0, -1).join(", ")} és ${items.at(-1)}`;
 }
 
 function contactEventLabel(type: ContactEventType, t: TFunction) {
