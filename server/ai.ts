@@ -11,11 +11,12 @@ const exchangeRates: Record<string, number> = {
 
 export function buildFallbackPost(input: DraftInput, settings: AppSettings): RentalPost {
   const now = new Date().toISOString();
+  const id = crypto.randomUUID();
   const text = input.originalText.trim();
   const title = inferTitle(text, input.sourceUrl);
   const structured = inferStructured(text, settings.referenceCurrency);
   return {
-    id: crypto.randomUUID(),
+    id,
     title,
     sourceUrl: input.sourceUrl,
     originalText: text,
@@ -26,10 +27,23 @@ export function buildFallbackPost(input: DraftInput, settings: AppSettings): Ren
     interest: "medium",
     categoryId: settings.categories[0]?.id ?? "medium",
     contactStatus: "not_contacted",
+    contactTracking: {
+      ref: makeContactRef(id),
+      landlordName: "",
+      messengerUrl: "",
+      lastContactedAt: "",
+      lastReplyAt: "",
+      lastMessage: "",
+      events: []
+    },
     structured,
     createdAt: now,
     updatedAt: now
   };
+}
+
+function makeContactRef(id: string) {
+  return `RL-${id.replace(/[^a-z0-9]/gi, "").slice(0, 6).toUpperCase()}`;
 }
 
 export async function analyzeWithAi(input: DraftInput, settings: AppSettings): Promise<RentalPost> {

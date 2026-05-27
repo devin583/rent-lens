@@ -50,11 +50,39 @@ export function dedupePosts(posts: RentalPost[]) {
 export function mergePostData(target: RentalPost, duplicate: RentalPost) {
   target.images = [...new Set([...target.images, ...duplicate.images])];
   target.notes = [target.notes, duplicate.notes].filter(Boolean).join("\n\n");
+  if (!target.contactTracking.landlordName && duplicate.contactTracking?.landlordName) {
+    target.contactTracking.landlordName = duplicate.contactTracking.landlordName;
+  }
+  if (!target.contactTracking.messengerUrl && duplicate.contactTracking?.messengerUrl) {
+    target.contactTracking.messengerUrl = duplicate.contactTracking.messengerUrl;
+  }
+  if (!target.contactTracking.lastContactedAt && duplicate.contactTracking?.lastContactedAt) {
+    target.contactTracking.lastContactedAt = duplicate.contactTracking.lastContactedAt;
+  }
+  if (!target.contactTracking.lastReplyAt && duplicate.contactTracking?.lastReplyAt) {
+    target.contactTracking.lastReplyAt = duplicate.contactTracking.lastReplyAt;
+  }
+  if (!target.contactTracking.lastMessage && duplicate.contactTracking?.lastMessage) {
+    target.contactTracking.lastMessage = duplicate.contactTracking.lastMessage;
+  }
+  target.contactTracking.events = mergeEvents(target.contactTracking.events, duplicate.contactTracking?.events ?? []);
   if (!target.translatedText && duplicate.translatedText) target.translatedText = duplicate.translatedText;
   if (!target.structured.mapQuery && duplicate.structured.mapQuery) target.structured.mapQuery = duplicate.structured.mapQuery;
   if (!target.structured.city && duplicate.structured.city) target.structured.city = duplicate.structured.city;
   if (!target.structured.address && duplicate.structured.address) target.structured.address = duplicate.structured.address;
   target.updatedAt = new Date().toISOString();
+}
+
+function mergeEvents(targetEvents: RentalPost["contactTracking"]["events"], duplicateEvents: RentalPost["contactTracking"]["events"]) {
+  const seen = new Set<string>();
+  return [...targetEvents, ...duplicateEvents]
+    .filter((event) => {
+      const key = `${event.type}-${event.at}-${event.text}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
 }
 
 export function canonicalUrl(url: string) {

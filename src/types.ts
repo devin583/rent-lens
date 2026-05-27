@@ -2,7 +2,8 @@ export type TargetLanguage = "zh" | "en";
 export type UiLocale = "zh" | "en";
 export type CurrencyCode = "HUF" | "EUR" | "USD" | "CNY" | "GBP";
 export type InterestLevel = "high" | "medium" | "low" | "archived";
-export type ContactStatus = "not_contacted" | "contacted" | "waiting" | "visited" | "rejected";
+export type ContactStatus = "not_contacted" | "contacted" | "waiting" | "replied" | "visited" | "rejected";
+export type ContactEventType = "contacted" | "replied" | "note";
 
 export type AiProviderType =
   | "openai"
@@ -56,9 +57,27 @@ export interface RentalPost {
   interest: InterestLevel;
   categoryId: string;
   contactStatus: ContactStatus;
+  contactTracking: ContactTracking;
   structured: StructuredInfo;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ContactTracking {
+  ref: string;
+  landlordName: string;
+  messengerUrl: string;
+  lastContactedAt: string;
+  lastReplyAt: string;
+  lastMessage: string;
+  events: ContactEvent[];
+}
+
+export interface ContactEvent {
+  id: string;
+  type: ContactEventType;
+  at: string;
+  text: string;
 }
 
 export interface AiProviderConfig {

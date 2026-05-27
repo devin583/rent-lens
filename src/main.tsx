@@ -7,6 +7,7 @@ import {
   ChevronDown,
   ChevronRight,
   Circle,
+  Copy,
   Footprints,
   ExternalLink,
   Home,
@@ -18,8 +19,10 @@ import {
   MoreHorizontal,
   Plus,
   RefreshCw,
+  Reply,
   Save,
   Search,
+  Send,
   Settings,
   Star,
   Trash2,
@@ -36,7 +39,9 @@ import type {
   AppSettings,
   AppStore,
   Category,
+  ContactEventType,
   ContactStatus,
+  ContactTracking,
   DraftInput,
   InterestLevel,
   MoneyValue,
@@ -48,6 +53,7 @@ import "./styles.css";
 type WorkspaceMode = "detail" | "new" | "cards";
 type CardSort = "updated_desc" | "created_desc" | "rent_asc" | "rent_desc" | "title_asc";
 type RentFilter = "all" | "detected" | "missing";
+type ContactMessageMode = "short" | "detailed" | "ref";
 
 function App() {
   const [store, setStore] = useState<AppStore | null>(null);
@@ -577,6 +583,9 @@ function CardOverview({
           post.structured.address,
           post.structured.rooms,
           post.structured.availability,
+          post.contactTracking.landlordName,
+          post.contactTracking.messengerUrl,
+          post.contactTracking.lastMessage,
           post.translatedText,
           post.originalText
         ]
@@ -620,6 +629,7 @@ function CardOverview({
           <option value="not_contacted">{t("notContacted")}</option>
           <option value="contacted">{t("contacted")}</option>
           <option value="waiting">{t("waiting")}</option>
+          <option value="replied">{t("replied")}</option>
           <option value="visited">{t("visited")}</option>
           <option value="rejected">{t("rejected")}</option>
         </select>
@@ -696,6 +706,7 @@ function RentalCard({
         <p className="card-location">{location}</p>
         <div className="card-meta">
           <span>{categoryName}</span>
+          {post.contactTracking.lastContactedAt ? <span>{t("lastContactedShort")}: {shortDate(post.contactTracking.lastContactedAt)}</span> : null}
           {post.structured.rooms ? <span>{post.structured.rooms}</span> : null}
           {post.images.length ? <span>{post.images.length} {t("images")}</span> : null}
         </div>
@@ -889,12 +900,15 @@ function PostDetail({
                 <option value="not_contacted">{t("notContacted")}</option>
                 <option value="contacted">{t("contacted")}</option>
                 <option value="waiting">{t("waiting")}</option>
+                <option value="replied">{t("replied")}</option>
                 <option value="visited">{t("visited")}</option>
                 <option value="rejected">{t("rejected")}</option>
               </select>
             </label>
           </div>
         </section>
+
+        <ContactFollowUpPanel post={post} t={t} onUpdate={onUpdate} />
 
         <section className="panel">
           <h3>{t("structuredInfo")}</h3>
@@ -940,6 +954,205 @@ function PostDetail({
         />
       ) : null}
     </div>
+  );
+}
+
+function ContactFollowUpPanel({
+  post,
+  t,
+  onUpdate
+}: {
+  post: RentalPost;
+  t: TFunction;
+  onUpdate: (patch: Partial<RentalPost>) => void;
+}) {
+  const tracking = post.contactTracking;
+  const messages = useMemo(() => buildContactMessages(post), [post]);
+  const [messageMode, setMessageMode] = useState<ContactMessageMode>("detailed");
+  const [messageDraft, setMessageDraft] = useState(messages.detailed);
+  const [landlordName, setLandlordName] = useState(tracking.landlordName);
+  const [messengerUrl, setMessengerUrl] = useState(tracking.messengerUrl);
+  const [noteDraft, setNoteDraft] = useState("");
+  const [notice, setNotice] = useState("");
+
+  useEffect(() => {
+    setMessageMode("detailed");
+    setMessageDraft(messages.detailed);
+    setLandlordName(tracking.landlordName);
+    setMessengerUrl(tracking.messengerUrl);
+    setNoteDraft("");
+    setNotice("");
+  }, [post.id, messages.detailed, tracking.landlordName, tracking.messengerUrl]);
+
+  function switchMessageMode(mode: ContactMessageMode) {
+    setMessageMode(mode);
+    setMessageDraft(messages[mode]);
+  }
+
+  function saveTracking(patch: Partial<ContactTracking>) {
+    onUpdate({
+      contactTracking: {
+        ...tracking,
+        ...patch
+      }
+    });
+  }
+
+  async function copyMessage(markContacted = false) {
+    const copied = await writeClipboard(messageDraft);
+    setNotice(copied ? t("copied") : t("copyFailed"));
+    if (markContacted) {
+      addEvent("contacted", messageDraft, "contacted", copied ? t("contactRecorded") : t("contactRecordedCopyFailed"));
+    }
+  }
+
+  function addEvent(type: ContactEventType, text: string, status?: ContactStatus, noticeText?: string) {
+    const value = text.trim();
+    if (!value) return;
+    const now = new Date().toISOString();
+    const event = {
+      id: crypto.randomUUID(),
+      type,
+      at: now,
+      text: value
+    };
+    onUpdate({
+      contactStatus: status ?? post.contactStatus,
+      contactTracking: {
+        ...tracking,
+        landlordName,
+        messengerUrl,
+        lastContactedAt: type === "contacted" ? now : tracking.lastContactedAt,
+        lastReplyAt: type === "replied" ? now : tracking.lastReplyAt,
+        lastMessage: type === "contacted" ? value : tracking.lastMessage,
+        events: [event, ...tracking.events].slice(0, 60)
+      }
+    });
+    if (type === "note") setNoteDraft("");
+    setNotice(noticeText || (type === "replied" ? t("replyRecorded") : type === "contacted" ? t("contactRecorded") : t("noteRecorded")));
+  }
+
+  return (
+    <section className="panel contact-panel">
+      <div className="contact-panel-head">
+        <div>
+          <h3>{t("followUp")}</h3>
+          <p>{t("followUpHint")}</p>
+        </div>
+        <span>{tracking.ref}</span>
+      </div>
+
+      <div className="contact-fields">
+        <label>
+          <span>{t("landlordName")}</span>
+          <input
+            value={landlordName}
+            onChange={(event) => setLandlordName(event.target.value)}
+            onBlur={() => saveTracking({ landlordName })}
+            placeholder={t("landlordNamePlaceholder")}
+          />
+        </label>
+        <label>
+          <span>{t("messengerUrl")}</span>
+          <div className="messenger-field">
+            <input
+              value={messengerUrl}
+              onChange={(event) => setMessengerUrl(event.target.value)}
+              onBlur={() => saveTracking({ messengerUrl })}
+              placeholder={t("messengerUrlPlaceholder")}
+            />
+            {messengerUrl ? (
+              <a className="icon-link" href={messengerUrl} target="_blank" rel="noreferrer" title={t("openChat")}>
+                <ExternalLink size={15} />
+              </a>
+            ) : null}
+          </div>
+        </label>
+      </div>
+
+      <div className="contact-anchors">
+        <label>{t("searchAnchors")}</label>
+        <div>
+          {messages.anchors.length ? messages.anchors.map((anchor) => <span key={anchor}>{anchor}</span>) : <span>{t("unrecognized")}</span>}
+        </div>
+      </div>
+
+      <div className="message-builder">
+        <div className="contact-message-switch" aria-label={t("suggestedMessage")}>
+          <button className={messageMode === "short" ? "active" : ""} onClick={() => switchMessageMode("short")}>
+            {t("shortMessage")}
+          </button>
+          <button className={messageMode === "detailed" ? "active" : ""} onClick={() => switchMessageMode("detailed")}>
+            {t("detailedMessage")}
+          </button>
+          <button className={messageMode === "ref" ? "active" : ""} onClick={() => switchMessageMode("ref")}>
+            {t("withPrivateRef")}
+          </button>
+        </div>
+        <textarea
+          className="contact-message-textarea"
+          value={messageDraft}
+          onChange={(event) => setMessageDraft(event.target.value)}
+          aria-label={t("suggestedMessage")}
+        />
+        <p className="contact-ref-hint">{t("privateRefHint")}</p>
+        <div className="contact-actions">
+          <button className="secondary-button" onClick={() => void copyMessage(false)}>
+            <Copy size={15} />
+            {t("copyMessage")}
+          </button>
+          <button className="primary-button" onClick={() => void copyMessage(true)}>
+            <Send size={15} />
+            {t("copyMarkContacted")}
+          </button>
+        </div>
+        {notice ? <p className="notice">{notice}</p> : null}
+      </div>
+
+      <div className="contact-quick-actions">
+        <button className="secondary-button" onClick={() => addEvent("contacted", messageDraft, "contacted")}>
+          <Send size={15} />
+          {t("markContacted")}
+        </button>
+        <button className="secondary-button" onClick={() => addEvent("replied", t("landlordReplied"), "replied")}>
+          <Reply size={15} />
+          {t("markReplied")}
+        </button>
+      </div>
+
+      <div className="contact-dates">
+        <InfoRow label={t("lastContacted")} value={tracking.lastContactedAt ? new Date(tracking.lastContactedAt).toLocaleString() : t("unrecognized")} />
+        <InfoRow label={t("lastReply")} value={tracking.lastReplyAt ? new Date(tracking.lastReplyAt).toLocaleString() : t("unrecognized")} />
+      </div>
+
+      <div className="followup-note">
+        <label>{t("addFollowUpNote")}</label>
+        <textarea
+          value={noteDraft}
+          onChange={(event) => setNoteDraft(event.target.value)}
+          placeholder={t("followUpNotePlaceholder")}
+        />
+        <button className="secondary-button" onClick={() => addEvent("note", noteDraft)}>
+          <Plus size={15} />
+          {t("addNote")}
+        </button>
+      </div>
+
+      <div className="contact-timeline">
+        <label>{t("contactTimeline")}</label>
+        {tracking.events.length ? (
+          tracking.events.map((event) => (
+            <div className="timeline-item" key={event.id}>
+              <span>{contactEventLabel(event.type, t)}</span>
+              <time>{new Date(event.at).toLocaleString()}</time>
+              <p>{event.text}</p>
+            </div>
+          ))
+        ) : (
+          <p className="muted">{t("noContactEvents")}</p>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -1628,6 +1841,76 @@ function InfoRow({ icon, label, value }: { icon?: React.ReactNode; label: string
   );
 }
 
+function buildContactMessages(post: RentalPost) {
+  const location = contactLocation(post);
+  const subject = contactSubject(post);
+  const rent = contactMoney(post.structured.rent);
+  const availability = safeContactAnchor(post.structured.availability);
+  const rooms = safeContactAnchor(post.structured.rooms);
+  const anchors = [location, rent, availability, rooms].filter(Boolean).slice(0, 5);
+  const baseQuestion = location
+    ? `hi, is the ${subject} in ${location} still available?`
+    : `hi, is this ${subject} still available?`;
+  const details = [rent ? `${rent} rent` : "", availability ? `${availability} availability` : "", rooms].filter(Boolean);
+  const detailed = details.length
+    ? `${baseQuestion}\ni saw the post mentioning ${joinNatural(details)}.`
+    : `${baseQuestion}\ni saw your facebook rental post and wanted to ask about availability.`;
+  return {
+    short: baseQuestion,
+    detailed,
+    ref: `${detailed}\n\nfor my notes: ${post.contactTracking.ref}`,
+    anchors
+  };
+}
+
+function contactLocation(post: RentalPost) {
+  const address = safeContactAnchor(post.structured.address);
+  const city = safeContactAnchor(post.structured.city);
+  if (address && city) return `${city}, ${address}`;
+  return address || city;
+}
+
+function contactSubject(post: RentalPost) {
+  const text = `${post.title} ${post.structured.rooms}`.toLowerCase();
+  if (text.includes("room") || text.includes("szoba")) return "room";
+  if (text.includes("apartment") || text.includes("flat") || text.includes("lakás")) return "apartment";
+  return "place";
+}
+
+function contactMoney(value: MoneyValue | null) {
+  if (!value?.amount) return "";
+  return `${value.amount.toLocaleString()} ${value.currency}`;
+}
+
+function safeContactAnchor(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed || /[\u4e00-\u9fff]/.test(trimmed)) return "";
+  return trimmed;
+}
+
+function joinNatural(items: string[]) {
+  if (items.length <= 1) return items[0] ?? "";
+  if (items.length === 2) return `${items[0]} and ${items[1]}`;
+  return `${items.slice(0, -1).join(", ")}, and ${items.at(-1)}`;
+}
+
+function contactEventLabel(type: ContactEventType, t: TFunction) {
+  return {
+    contacted: t("contactedEvent"),
+    replied: t("replyEvent"),
+    note: t("noteEvent")
+  }[type];
+}
+
+async function writeClipboard(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function moneyText(value: MoneyValue | null, referenceCurrency: string, t: TFunction) {
   if (!value?.amount) return t("unrecognized");
   const reference = value.referenceAmount ? ` ≈ ${value.referenceAmount.toLocaleString()} ${referenceCurrency}` : "";
@@ -1696,6 +1979,12 @@ function postTime(value: string) {
   return Number.isFinite(time) ? time : 0;
 }
 
+function shortDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString();
+}
+
 function modelOptions(provider: AiProviderConfig, defaultModel: string) {
   return [...new Set([provider.model, defaultModel, ...(provider.availableModels ?? [])].filter(Boolean))].filter(
     (model) => model !== defaultModel || provider.model === defaultModel
@@ -1737,6 +2026,7 @@ function contactLabel(status: ContactStatus, t: TFunction) {
     not_contacted: t("notContacted"),
     contacted: t("contacted"),
     waiting: t("waiting"),
+    replied: t("replied"),
     visited: t("visited"),
     rejected: t("rejected")
   }[status];

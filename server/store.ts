@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { getProviderPreset } from "../src/aiProviders";
-import type { AiProviderConfig, AiProviderVendor, AppSettings, AppStore, Category, RentalPost } from "../src/types";
+import type { AiProviderConfig, AiProviderVendor, AppSettings, AppStore, Category, ContactEvent, RentalPost } from "../src/types";
 import { dedupePosts, findDuplicatePost, mergePostData } from "./dedupe";
 
 const storePath = join(process.cwd(), "data", "store.json");
@@ -180,7 +180,43 @@ function normalizePosts(posts: RentalPost[], categories: Category[]) {
     const migratedCategoryId = post.categoryId || post.interest || "medium";
     return {
       ...post,
-      categoryId: categoryIds.has(migratedCategoryId) ? migratedCategoryId : normalizedCategories[0].id
+      categoryId: categoryIds.has(migratedCategoryId) ? migratedCategoryId : normalizedCategories[0].id,
+      contactStatus: normalizeContactStatus(post.contactStatus),
+      contactTracking: normalizeContactTracking(post)
     };
   });
+}
+
+function normalizeContactStatus(status: RentalPost["contactStatus"]) {
+  return ["not_contacted", "contacted", "waiting", "replied", "visited", "rejected"].includes(status)
+    ? status
+    : "not_contacted";
+}
+
+function normalizeContactTracking(post: RentalPost) {
+  const tracking = post.contactTracking;
+  return {
+    ref: tracking?.ref || makeContactRef(post.id),
+    landlordName: String(tracking?.landlordName ?? ""),
+    messengerUrl: String(tracking?.messengerUrl ?? ""),
+    lastContactedAt: String(tracking?.lastContactedAt ?? ""),
+    lastReplyAt: String(tracking?.lastReplyAt ?? ""),
+    lastMessage: String(tracking?.lastMessage ?? ""),
+    events: normalizeContactEvents(tracking?.events ?? [])
+  };
+}
+
+function normalizeContactEvents(events: ContactEvent[]) {
+  return events
+    .map((event) => ({
+      id: event.id || crypto.randomUUID(),
+      type: ["contacted", "replied", "note"].includes(event.type) ? event.type : "note",
+      at: event.at || new Date().toISOString(),
+      text: String(event.text ?? "")
+    }))
+    .filter((event) => event.text || event.type !== "note");
+}
+
+function makeContactRef(id: string) {
+  return `RL-${id.replace(/[^a-z0-9]/gi, "").slice(0, 6).toUpperCase()}`;
 }

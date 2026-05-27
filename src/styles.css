@@ -772,6 +772,170 @@ textarea {
   background: #fff;
 }
 
+.contact-panel {
+  gap: 13px;
+}
+
+.contact-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.contact-panel-head p,
+.contact-ref-hint {
+  margin-top: 4px;
+  color: #77736c;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.contact-panel-head span {
+  flex: 0 0 auto;
+  padding: 4px 7px;
+  color: #6d6860;
+  border: 1px solid #e7e1d8;
+  border-radius: 999px;
+  background: #fbfaf7;
+  font-size: 11px;
+  font-weight: 640;
+}
+
+.contact-fields,
+.message-builder,
+.followup-note,
+.contact-timeline {
+  display: grid;
+  gap: 8px;
+}
+
+.contact-fields label,
+.followup-note label {
+  display: grid;
+  gap: 6px;
+}
+
+.messenger-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 38px;
+  gap: 7px;
+}
+
+.contact-anchors {
+  display: grid;
+  gap: 7px;
+}
+
+.contact-anchors div,
+.contact-actions,
+.contact-quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.contact-anchors span {
+  max-width: 100%;
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+  overflow: hidden;
+  color: #69645c;
+  border: 1px solid #e6e1d8;
+  border-radius: 999px;
+  background: #fbfaf7;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contact-message-switch {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid #e2ded6;
+  border-radius: 10px;
+  background: #f8f6f2;
+}
+
+.contact-message-switch button {
+  min-height: 30px;
+  padding: 0 6px;
+  color: #68635c;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 12px;
+}
+
+.contact-message-switch button.active {
+  color: #2f2f2f;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(37, 34, 29, 0.08);
+}
+
+.contact-message-textarea {
+  min-height: 122px;
+  font-size: 13px;
+}
+
+.contact-actions .primary-button,
+.contact-actions .secondary-button,
+.contact-quick-actions .secondary-button {
+  flex: 1 1 136px;
+  min-height: 34px;
+  font-size: 12px;
+}
+
+.contact-dates {
+  display: grid;
+  gap: 0;
+  border-top: 1px solid #eeeae3;
+  border-bottom: 1px solid #eeeae3;
+}
+
+.contact-dates .info-row {
+  padding: 8px 0;
+}
+
+.followup-note textarea {
+  min-height: 72px;
+  font-size: 13px;
+}
+
+.followup-note .secondary-button {
+  justify-self: start;
+  min-height: 34px;
+}
+
+.timeline-item {
+  display: grid;
+  gap: 4px;
+  padding: 9px 0;
+  border-bottom: 1px solid #eeeae3;
+}
+
+.timeline-item span {
+  color: #2f2f2f;
+  font-size: 13px;
+  font-weight: 640;
+}
+
+.timeline-item time {
+  color: #817b73;
+  font-size: 11px;
+}
+
+.timeline-item p {
+  color: #3a3834;
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
 .header-actions {
   display: flex;
   gap: 8px;

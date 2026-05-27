@@ -156,6 +156,7 @@ app.post("/api/posts/:id/reanalyze", async (request, response) => {
     id: current.id,
     interest: current.interest,
     contactStatus: current.contactStatus,
+    contactTracking: current.contactTracking,
     notes: current.notes,
     createdAt: current.createdAt,
     updatedAt: new Date().toISOString()
