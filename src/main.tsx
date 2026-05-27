@@ -59,6 +59,7 @@ type RentFilter = "all" | "detected" | "missing";
 type ContactMessageMode = "short" | "detailed" | "ref";
 type PhraseLanguage = "en" | "hu";
 type PhraseTemplateId = "availability" | "viewing" | "costs" | "deposit" | "address" | "follow_up";
+const statusFlow: ContactStatus[] = ["not_contacted", "contacted", "waiting", "replied", "visited", "rejected"];
 
 function App() {
   const [store, setStore] = useState<AppStore | null>(null);
@@ -748,6 +749,7 @@ function PostDetail({
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState(post.title);
   const [textView, setTextView] = useState<"translation" | "original">("translation");
+  const [contactDrawerOpen, setContactDrawerOpen] = useState(false);
   const skipTitleCommitRef = useRef(false);
 
   useEffect(() => {
@@ -758,6 +760,7 @@ function PostDetail({
 
   useEffect(() => {
     setTextView("translation");
+    setContactDrawerOpen(false);
   }, [post.id]);
 
   function commitTitle() {
@@ -780,8 +783,8 @@ function PostDetail({
   }
 
   return (
-    <div className="detail-grid">
-      <section className="content-pane">
+    <div className="detail-page">
+      <div className="detail-top">
         <div className="page-header">
           <div className="page-title">
             {editingTitle ? (
@@ -828,6 +831,38 @@ function PostDetail({
 
         <ListingSnapshot post={post} referenceCurrency={referenceCurrency} t={t} />
 
+        <StatusPipeline status={post.contactStatus} t={t} onSelect={(status) => onUpdate({ contactStatus: status })} />
+        <NextActionCallout
+          post={post}
+          t={t}
+          onOpenContact={() => setContactDrawerOpen(true)}
+          onUpdate={onUpdate}
+        />
+      </div>
+
+      <div className="detail-body-grid">
+        <section className="content-pane">
+        <div className="media-section">
+          <div className="section-title">
+            <Image size={16} />
+            <h3>{t("images")}</h3>
+          </div>
+          {post.images.length ? (
+            <div className="image-grid">
+              {post.images.slice(0, 5).map((src, index, visibleImages) => (
+                <button className="image-thumb" key={src} onClick={() => setLightboxIndex(index)}>
+                  <img src={src} alt="Rental post" />
+                  {index === visibleImages.length - 1 && post.images.length > visibleImages.length ? (
+                    <span className="image-more">+{post.images.length - visibleImages.length}</span>
+                  ) : null}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="muted">{t("noImages")}</p>
+          )}
+        </div>
+
         <div className="read-section text-switch-section">
           <div className="section-header">
             <h3>{textView === "translation" ? t("translation") : t("original")}</h3>
@@ -851,41 +886,10 @@ function PostDetail({
           <p className="long-text">{textView === "translation" ? post.translatedText || t("unrecognized") : post.originalText}</p>
         </div>
 
-        <div className="media-section">
-          <div className="section-title">
-            <Image size={16} />
-            <h3>{t("images")}</h3>
-          </div>
-          {post.images.length ? (
-            <div className="image-grid">
-              {post.images.map((src, index) => (
-                <button className="image-thumb" key={src} onClick={() => setLightboxIndex(index)}>
-                  <img src={src} alt="Rental post" />
-                </button>
-              ))}
-            </div>
-          ) : (
-            <p className="muted">{t("noImages")}</p>
-          )}
-        </div>
-
         <MapPanel post={post} mapQuery={mapQuery} targetAddress={targetAddress} targetLocation={targetLocation} t={t} />
       </section>
 
       <aside className="inspector">
-        <section className="rent-summary">
-          <div>
-            <span>{t("rent")}</span>
-            <strong>{moneyMain(post.structured.rent, t)}</strong>
-            <small>{moneyReference(post.structured.rent, referenceCurrency)}</small>
-          </div>
-          {post.structured.deposit?.amount ? (
-            <p>
-              {t("deposit")}: {moneyMain(post.structured.deposit, t)}
-            </p>
-          ) : null}
-        </section>
-
         <section className="status-panel workflow-panel">
           <div className="workflow-heading">
             <h3>{t("workflow")}</h3>
@@ -919,7 +923,7 @@ function PostDetail({
           </div>
         </section>
 
-        <ContactFollowUpPanel post={post} t={t} onUpdate={onUpdate} />
+        <ContactSummaryCard post={post} t={t} onOpen={() => setContactDrawerOpen(true)} />
 
         <section className="panel">
           <h3>{t("structuredInfo")}</h3>
@@ -956,6 +960,25 @@ function PostDetail({
           />
         </section>
       </aside>
+      </div>
+
+      {contactDrawerOpen ? (
+        <div className="drawer-backdrop" onClick={() => setContactDrawerOpen(false)}>
+          <aside className="comm-drawer" onClick={(event) => event.stopPropagation()}>
+            <div className="drawer-head">
+              <div>
+                <h3>{t("followUp")}</h3>
+                <p>{post.title}</p>
+              </div>
+              <button className="icon-button" onClick={() => setContactDrawerOpen(false)} title={t("close")}>
+                <X size={16} />
+              </button>
+            </div>
+            <ContactFollowUpPanel post={post} t={t} onUpdate={onUpdate} />
+          </aside>
+        </div>
+      ) : null}
+
       {lightboxIndex !== null ? (
         <ImageLightbox
           images={post.images}
@@ -1024,6 +1047,122 @@ function ListingSnapshot({
           </div>
         ))}
       </div>
+    </section>
+  );
+}
+
+function StatusPipeline({
+  status,
+  t,
+  onSelect
+}: {
+  status: ContactStatus;
+  t: TFunction;
+  onSelect: (status: ContactStatus) => void;
+}) {
+  const currentIndex = Math.max(0, statusFlow.indexOf(status));
+  return (
+    <section className="status-pipeline" aria-label={t("statusPipeline")}>
+      {statusFlow.map((step, index) => {
+        const state = index < currentIndex ? "done" : index === currentIndex ? "current" : "future";
+        return (
+          <button className={`pipeline-step ${state}`} key={step} onClick={() => onSelect(step)}>
+            <span>{state === "done" ? "✓" : index + 1}</span>
+            <b>{contactLabel(step, t)}</b>
+          </button>
+        );
+      })}
+    </section>
+  );
+}
+
+function NextActionCallout({
+  post,
+  t,
+  onOpenContact,
+  onUpdate
+}: {
+  post: RentalPost;
+  t: TFunction;
+  onOpenContact: () => void;
+  onUpdate: (patch: Partial<RentalPost>) => void;
+}) {
+  const info = nextActionInfo(post, t);
+
+  function recordReply() {
+    onUpdate({
+      contactStatus: "replied",
+      contactTracking: appendTrackingEvent(post.contactTracking, "replied", t("landlordReplied"))
+    });
+  }
+
+  function markVisited() {
+    onUpdate({
+      contactStatus: "visited",
+      contactTracking: appendTrackingEvent(post.contactTracking, "note", t("viewingCompleted"))
+    });
+  }
+
+  return (
+    <section className={`next-action-card ${info.tone}`}>
+      <div>
+        <span>{t("nextStep")}</span>
+        <strong>{info.main}</strong>
+        <p>{info.sub}</p>
+      </div>
+      <div className="next-action-buttons">
+        <button className="secondary-button" onClick={onOpenContact}>
+          <MessageCircle size={15} />
+          {info.secondary}
+        </button>
+        {post.contactStatus === "replied" ? (
+          <button className="primary-button" onClick={markVisited}>
+            <CheckCircle2 size={15} />
+            {t("markVisited")}
+          </button>
+        ) : post.contactStatus === "visited" || post.contactStatus === "rejected" ? null : (
+          <button className="primary-button" onClick={post.contactStatus === "not_contacted" ? onOpenContact : recordReply}>
+            <Reply size={15} />
+            {info.primary}
+          </button>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function ContactSummaryCard({ post, t, onOpen }: { post: RentalPost; t: TFunction; onOpen: () => void }) {
+  const tracking = post.contactTracking;
+  const anchors = buildContactMessages(post, "en").anchors;
+  return (
+    <section className="panel contact-summary-card">
+      <div className="contact-summary-head">
+        <div>
+          <h3>{t("contactSummary")}</h3>
+          <p>{tracking.ref}</p>
+        </div>
+        <button className="secondary-button" onClick={onOpen}>
+          <MessageCircle size={15} />
+          {t("openContactPanel")}
+        </button>
+      </div>
+      <div className="contact-summary-body">
+        <InfoRow label={t("landlordName")} value={tracking.landlordName || post.structured.contact[0] || t("unrecognized")} />
+        <InfoRow label={t("lastContacted")} value={tracking.lastContactedAt ? new Date(tracking.lastContactedAt).toLocaleString() : t("unrecognized")} />
+        <InfoRow label={t("lastReply")} value={tracking.lastReplyAt ? new Date(tracking.lastReplyAt).toLocaleString() : t("unrecognized")} />
+      </div>
+      <div className="contact-anchors compact-anchors">
+        <label>{t("searchAnchors")}</label>
+        <div>
+          {anchors.length ? anchors.map((anchor) => <span key={anchor}>{anchor}</span>) : <span>{t("unrecognized")}</span>}
+        </div>
+      </div>
+      {tracking.messengerUrl ? (
+        <a className="contact-open-link" href={tracking.messengerUrl} target="_blank" rel="noreferrer">
+          <ExternalLink size={14} />
+          {t("openChat")}
+        </a>
+      ) : null}
     </section>
   );
 }
@@ -1944,6 +2083,81 @@ function InfoRow({ icon, label, value }: { icon?: React.ReactNode; label: string
       <p>{value}</p>
     </div>
   );
+}
+
+function nextActionInfo(post: RentalPost, t: TFunction) {
+  const days = daysSince(post.contactTracking.lastContactedAt);
+  if (post.contactStatus === "not_contacted") {
+    return {
+      tone: "neutral",
+      main: t("nextContactMain"),
+      sub: t("nextContactSub"),
+      primary: t("openContactPanel"),
+      secondary: t("prepareMessage")
+    };
+  }
+  if (post.contactStatus === "contacted" || post.contactStatus === "waiting") {
+    const waitingDays = days ?? 0;
+    return {
+      tone: waitingDays >= 3 ? "warning" : "neutral",
+      main: waitingDays >= 3 ? `${t("waitingOverdue")} · ${waitingDays}d` : `${t("waitingForReply")} · ${waitingDays}d`,
+      sub: post.contactTracking.lastContactedAt
+        ? `${t("sentAt")} ${new Date(post.contactTracking.lastContactedAt).toLocaleString()}`
+        : t("contactRecorded"),
+      primary: t("markReplied"),
+      secondary: waitingDays >= 3 ? t("sendFollowUp") : t("openContactPanel")
+    };
+  }
+  if (post.contactStatus === "replied") {
+    return {
+      tone: "success",
+      main: t("landlordReplied"),
+      sub: post.contactTracking.lastReplyAt
+        ? `${t("lastReply")} ${new Date(post.contactTracking.lastReplyAt).toLocaleString()}`
+        : t("replyRecorded"),
+      primary: t("markVisited"),
+      secondary: t("openContactPanel")
+    };
+  }
+  if (post.contactStatus === "visited") {
+    return {
+      tone: "success",
+      main: t("visitedMain"),
+      sub: t("visitedSub"),
+      primary: "",
+      secondary: t("openContactPanel")
+    };
+  }
+  return {
+    tone: "muted",
+    main: t("archivedMain"),
+    sub: t("archivedSub"),
+    primary: "",
+    secondary: t("openContactPanel")
+  };
+}
+
+function appendTrackingEvent(tracking: ContactTracking, type: ContactEventType, text: string): ContactTracking {
+  const now = new Date().toISOString();
+  return {
+    ...tracking,
+    lastReplyAt: type === "replied" ? now : tracking.lastReplyAt,
+    events: [
+      {
+        id: crypto.randomUUID(),
+        type,
+        at: now,
+        text
+      },
+      ...tracking.events
+    ].slice(0, 60)
+  };
+}
+
+function daysSince(value: string) {
+  const time = new Date(value).getTime();
+  if (!Number.isFinite(time)) return null;
+  return Math.max(0, Math.floor((Date.now() - time) / 86_400_000));
 }
 
 function buildContactMessages(post: RentalPost, language: PhraseLanguage = "en") {
