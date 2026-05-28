@@ -20,10 +20,15 @@
     const container = findBestContainer();
     const text = cleanText(selectionText.length >= MIN_TEXT_LENGTH ? selectionText : container?.innerText || "");
     const images = container ? collectImages(container) : [];
-    const sourceUrl = findPermalink(container) || window.location.href;
+    const sourceUrl = currentMarketplaceItemUrl() || findPermalink(container) || normalizePermalink(window.location.href);
 
     if (!text && images.length === 0) {
       throw new Error("No post text or images were detected. Open the post dialog, or select the post text and try again.");
+    }
+    if (isGenericFacebookUrl(sourceUrl)) {
+      throw new Error(
+        "Could not detect a specific Facebook post or Marketplace listing URL. Open the listing detail page or post dialog, then try again."
+      );
     }
 
     return {
@@ -97,23 +102,107 @@
 
   function findPermalink(container) {
     if (!container) return "";
+    const currentItemId = marketplaceItemId(window.location.href);
     const anchors = [...container.querySelectorAll("a[href]")];
     const candidates = anchors
-      .map((anchor) => anchor.href)
-      .filter((href) =>
-        /\/posts\/|\/permalink\/|permalink\.php|\/groups\/.+\/posts\/|\/marketplace\/item\//i.test(href)
-      )
-      .map((href) => stripTracking(href));
-    return candidates[0] || "";
+      .map((anchor) => normalizePermalink(anchor.href))
+      .filter((href) => isConcreteFacebookUrl(href))
+      .map((href) => ({
+        href,
+        score: permalinkScore(href, currentItemId)
+      }))
+      .sort((a, b) => b.score - a.score);
+    return candidates[0]?.href || "";
   }
 
-  function stripTracking(url) {
+  function currentMarketplaceItemUrl() {
+    return marketplaceItemUrl(window.location.href);
+  }
+
+  function permalinkScore(url, currentItemId) {
+    const itemId = marketplaceItemId(url);
+    if (currentItemId && itemId === currentItemId) return 100;
+    if (itemId) return 40;
+    if (/\/groups\/[^/]+\/posts\/[^/?#]+/i.test(url)) return 30;
+    if (/permalink\.php/i.test(url)) return 20;
+    if (/\/posts\/[^/?#]+/i.test(url)) return 15;
+    return 1;
+  }
+
+  function normalizePermalink(url) {
     try {
       const parsed = new URL(url);
-      ["__cft__", "__tn__", "comment_id", "reply_comment_id", "ref"].forEach((key) => parsed.searchParams.delete(key));
-      return parsed.toString();
+      const marketplaceUrl = marketplaceItemUrl(parsed.toString());
+      if (marketplaceUrl) return marketplaceUrl;
+
+      const multipermalink = parsed.searchParams.get("multi_permalinks");
+      const groupMatch = parsed.pathname.match(/\/groups\/([^/?#]+)/i);
+      if (groupMatch && multipermalink) {
+        return `https://www.facebook.com/groups/${groupMatch[1]}/posts/${multipermalink}`;
+      }
+
+      [
+        "__cft__",
+        "__tn__",
+        "comment_id",
+        "reply_comment_id",
+        "ref",
+        "referral_code",
+        "referral_story_type",
+        "hoisted_section_header_type",
+        "mibextid",
+        "rdid",
+        "share_url",
+        "tracking"
+      ].forEach((key) => parsed.searchParams.delete(key));
+      parsed.hash = "";
+      return parsed.toString().replace(/\/$/, "");
     } catch {
       return url;
+    }
+  }
+
+  function marketplaceItemUrl(url) {
+    const id = marketplaceItemId(url);
+    return id ? `https://www.facebook.com/marketplace/item/${id}` : "";
+  }
+
+  function marketplaceItemId(url) {
+    try {
+      const parsed = new URL(url);
+      const match = parsed.pathname.match(/\/marketplace\/item\/(\d+)/i);
+      return match?.[1] || parsed.searchParams.get("item_id") || "";
+    } catch {
+      const match = String(url).match(/\/marketplace\/item\/(\d+)/i);
+      return match?.[1] || "";
+    }
+  }
+
+  function isConcreteFacebookUrl(url) {
+    try {
+      const parsed = new URL(url);
+      if (!/(^|\.)facebook\.com$/i.test(parsed.hostname)) return false;
+      return (
+        /\/marketplace\/item\/\d+/i.test(parsed.pathname) ||
+        /\/groups\/[^/]+\/posts\/[^/?#]+/i.test(parsed.pathname) ||
+        /\/groups\/[^/]+\/permalink\/[^/?#]+/i.test(parsed.pathname) ||
+        /\/posts\/[^/?#]+/i.test(parsed.pathname) ||
+        /\/share\/[^/?#]+/i.test(parsed.pathname) ||
+        (parsed.pathname.endsWith("/permalink.php") &&
+          (parsed.searchParams.has("story_fbid") || parsed.searchParams.has("multi_permalinks")))
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  function isGenericFacebookUrl(url) {
+    try {
+      const parsed = new URL(url);
+      if (!/(^|\.)facebook\.com$/i.test(parsed.hostname)) return false;
+      return !isConcreteFacebookUrl(url);
+    } catch {
+      return false;
     }
   }
 

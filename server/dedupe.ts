@@ -8,11 +8,13 @@ export interface DuplicateMatch {
 
 export function findDuplicatePost(posts: RentalPost[], draft: DraftInput | RentalPost): DuplicateMatch | null {
   const incomingUrl = canonicalUrl(draft.sourceUrl);
+  const canMatchByUrl = isUrlReliableForDedupe(incomingUrl);
   const incomingText = textFingerprint(draft.originalText);
   let best: DuplicateMatch | null = null;
 
   for (const post of posts) {
-    if (incomingUrl && canonicalUrl(post.sourceUrl) === incomingUrl) {
+    const postUrl = canonicalUrl(post.sourceUrl);
+    if (canMatchByUrl && postUrl === incomingUrl && isUrlReliableForDedupe(postUrl)) {
       return { post, reason: "url", score: 1 };
     }
     if (!incomingText || !post.originalText) continue;
@@ -89,6 +91,16 @@ export function canonicalUrl(url: string) {
   if (!url) return "";
   try {
     const parsed = new URL(url);
+    const marketplaceUrl = canonicalMarketplaceUrl(parsed);
+    if (marketplaceUrl) return marketplaceUrl;
+
+    const groupUrl = canonicalGroupUrl(parsed);
+    if (groupUrl) return groupUrl;
+
+    if (isFacebookHost(parsed.hostname)) {
+      parsed.protocol = "https:";
+      parsed.hostname = "www.facebook.com";
+    }
     parsed.hash = "";
     [
       "__cft__",
@@ -96,15 +108,73 @@ export function canonicalUrl(url: string) {
       "comment_id",
       "reply_comment_id",
       "ref",
+      "referral_code",
+      "referral_story_type",
+      "hoisted_section_header_type",
       "mibextid",
       "rdid",
       "share_url",
       "tracking"
     ].forEach((key) => parsed.searchParams.delete(key));
+    sortSearchParams(parsed);
     return parsed.toString().replace(/\/$/, "");
   } catch {
     return url.trim();
   }
+}
+
+export function isUrlReliableForDedupe(url: string) {
+  if (!url) return false;
+  try {
+    const parsed = new URL(url);
+    if (!isFacebookHost(parsed.hostname)) return true;
+    return isConcreteFacebookUrl(parsed);
+  } catch {
+    return false;
+  }
+}
+
+function canonicalMarketplaceUrl(parsed: URL) {
+  const pathMatch = parsed.pathname.match(/\/marketplace\/item\/(\d+)/i);
+  const itemId = pathMatch?.[1] || parsed.searchParams.get("item_id");
+  return itemId ? `https://www.facebook.com/marketplace/item/${itemId}` : "";
+}
+
+function canonicalGroupUrl(parsed: URL) {
+  const directMatch = parsed.pathname.match(/\/groups\/([^/]+)\/(?:posts|permalink)\/([^/?#]+)/i);
+  if (directMatch) {
+    return `https://www.facebook.com/groups/${directMatch[1]}/posts/${directMatch[2]}`;
+  }
+
+  const groupMatch = parsed.pathname.match(/\/groups\/([^/?#]+)/i);
+  const multipermalink = parsed.searchParams.get("multi_permalinks");
+  if (groupMatch && multipermalink) {
+    return `https://www.facebook.com/groups/${groupMatch[1]}/posts/${multipermalink}`;
+  }
+
+  return "";
+}
+
+function isConcreteFacebookUrl(parsed: URL) {
+  return (
+    /\/marketplace\/item\/\d+/i.test(parsed.pathname) ||
+    /\/groups\/[^/]+\/posts\/[^/?#]+/i.test(parsed.pathname) ||
+    /\/groups\/[^/]+\/permalink\/[^/?#]+/i.test(parsed.pathname) ||
+    /\/posts\/[^/?#]+/i.test(parsed.pathname) ||
+    /\/share\/[^/?#]+/i.test(parsed.pathname) ||
+    (parsed.pathname.endsWith("/permalink.php") &&
+      (parsed.searchParams.has("story_fbid") || parsed.searchParams.has("multi_permalinks")))
+  );
+}
+
+function isFacebookHost(hostname: string) {
+  return /(^|\.)facebook\.com$/i.test(hostname);
+}
+
+function sortSearchParams(parsed: URL) {
+  const sorted = [...parsed.searchParams.entries()].sort(([a], [b]) => a.localeCompare(b));
+  parsed.search = "";
+  sorted.forEach(([key, value]) => parsed.searchParams.append(key, value));
 }
 
 function textFingerprint(text: string) {
