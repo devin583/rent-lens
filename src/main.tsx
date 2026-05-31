@@ -61,6 +61,46 @@ type PhraseLanguage = "en" | "hu";
 type PhraseTemplateId = "availability" | "viewing" | "costs" | "deposit" | "address" | "follow_up";
 const statusFlow: ContactStatus[] = ["not_contacted", "contacted", "waiting", "replied", "visited", "rejected"];
 
+function postMatchesSearch(post: RentalPost, query: string) {
+  const terms = normalizeSearchText(query).split(" ").filter(Boolean);
+  if (!terms.length) return true;
+  const haystack = searchablePostText(post);
+  return terms.every((term) => haystack.includes(term));
+}
+
+function searchablePostText(post: RentalPost) {
+  return normalizeSearchText(
+    [
+      post.title,
+      post.sourceUrl,
+      post.notes,
+      post.structured.city,
+      post.structured.address,
+      post.structured.rooms,
+      post.structured.availability,
+      post.structured.contact.join(" "),
+      post.structured.fees.map((fee) => [fee.label, fee.amount, fee.currency, fee.cadence].filter(Boolean).join(" ")).join(" "),
+      post.structured.important.join(" "),
+      post.contactTracking.ref,
+      post.contactTracking.landlordName,
+      post.contactTracking.messengerUrl,
+      post.contactTracking.lastMessage,
+      post.contactTracking.events.map((event) => event.text).join(" "),
+      post.translatedText,
+      post.originalText
+    ].join(" ")
+  );
+}
+
+function normalizeSearchText(value: string) {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function App() {
   const [store, setStore] = useState<AppStore | null>(null);
   const [selectedId, setSelectedId] = useState("");
@@ -71,15 +111,20 @@ function App() {
   const [imageText, setImageText] = useState("");
   const [notice, setNotice] = useState("");
   const [cityFilter, setCityFilter] = useState("");
+  const [postSearchQuery, setPostSearchQuery] = useState("");
 
   useEffect(() => {
     loadStore();
   }, []);
 
   const posts = store?.posts ?? [];
-  const filteredPosts = useMemo(
+  const cityFilteredPosts = useMemo(
     () => posts.filter((post) => !cityFilter || cityKey(post) === cityFilter),
     [posts, cityFilter]
+  );
+  const filteredPosts = useMemo(
+    () => cityFilteredPosts.filter((post) => postMatchesSearch(post, postSearchQuery)),
+    [cityFilteredPosts, postSearchQuery]
   );
   const selected = filteredPosts.find((post) => post.id === selectedId) ?? filteredPosts[0] ?? posts[0];
   const t = createT(store?.settings.uiLocale ?? "en");
@@ -285,25 +330,38 @@ function App() {
               ))}
             </div>
           ) : null}
+
+          <label className="search-field sidebar-search">
+            <Search size={15} />
+            <input
+              value={postSearchQuery}
+              onChange={(event) => setPostSearchQuery(event.target.value)}
+              placeholder={t("searchPosts")}
+            />
+          </label>
         </div>
 
         <div className="sidebar-scroll">
-          <div className="group-list">
-            {grouped.map(({ category, posts }) => (
-              <PostGroup
-                key={category.id}
-                category={category}
-                posts={posts}
-                activeId={workspaceMode === "detail" ? selected?.id : undefined}
-                t={t}
-                onRename={renameCategory}
-                onSelect={(id) => {
-                  setWorkspaceMode("detail");
-                  setSelectedId(id);
-                }}
-              />
-            ))}
-          </div>
+          {filteredPosts.length ? (
+            <div className="group-list">
+              {grouped.map(({ category, posts }) => (
+                <PostGroup
+                  key={category.id}
+                  category={category}
+                  posts={posts}
+                  activeId={workspaceMode === "detail" ? selected?.id : undefined}
+                  t={t}
+                  onRename={renameCategory}
+                  onSelect={(id) => {
+                    setWorkspaceMode("detail");
+                    setSelectedId(id);
+                  }}
+                />
+              ))}
+            </div>
+          ) : (
+            <p className="sidebar-empty">{t("noMatchingPosts")}</p>
+          )}
         </div>
 
         <div className="sidebar-bottom">
@@ -331,11 +389,13 @@ function App() {
           />
         ) : workspaceMode === "cards" ? (
           <CardOverview
-            posts={filteredPosts}
+            posts={cityFilteredPosts}
             categories={categories}
             referenceCurrency={store.settings.referenceCurrency}
             cityFilter={cityFilter}
+            query={postSearchQuery}
             t={t}
+            onQueryChange={setPostSearchQuery}
             onSelect={(id) => {
               setWorkspaceMode("detail");
               setSelectedId(id);
@@ -556,17 +616,20 @@ function CardOverview({
   categories,
   referenceCurrency,
   cityFilter,
+  query,
   t,
+  onQueryChange,
   onSelect
 }: {
   posts: RentalPost[];
   categories: Category[];
   referenceCurrency: string;
   cityFilter: string;
+  query: string;
   t: TFunction;
+  onQueryChange: (value: string) => void;
   onSelect: (id: string) => void;
 }) {
-  const [query, setQuery] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [contactStatus, setContactStatus] = useState<ContactStatus | "">("");
   const [rentFilter, setRentFilter] = useState<RentFilter>("all");
@@ -583,22 +646,7 @@ function CardOverview({
         if (rentFilter === "detected" && !hasRent) return false;
         if (rentFilter === "missing" && hasRent) return false;
         if (!search) return true;
-        return [
-          post.title,
-          post.structured.city,
-          post.structured.address,
-          post.structured.rooms,
-          post.structured.availability,
-          post.contactTracking.landlordName,
-          post.contactTracking.messengerUrl,
-          post.contactTracking.lastMessage,
-          post.translatedText,
-          post.originalText
-        ]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase()
-          .includes(search);
+        return postMatchesSearch(post, search);
       })
       .sort((a, b) => comparePosts(a, b, sortBy, categoryMap));
   }, [posts, categoryId, contactStatus, rentFilter, query, sortBy, categoryMap]);
@@ -620,7 +668,7 @@ function CardOverview({
       <section className="overview-toolbar">
         <label className="search-field">
           <Search size={15} />
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("searchPosts")} />
+          <input value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder={t("searchPosts")} />
         </label>
         <select value={categoryId} onChange={(event) => setCategoryId(event.target.value)}>
           <option value="">{t("allCategories")}</option>

@@ -219,6 +219,18 @@ p {
   background: #3b403b;
 }
 
+.sidebar-search input {
+  min-height: 36px;
+  background: #fff;
+}
+
+.sidebar-empty {
+  padding: 16px 4px;
+  color: #88847c;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .post-group {
   position: relative;
   display: flex;
